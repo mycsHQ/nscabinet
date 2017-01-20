@@ -109,6 +109,53 @@ function download (files,params,info) {
     return request( toRequest ).pipe(emitter);
 }
 
+module.exports.deleteFiles = deleteFiles;
+function deleteFiles(files,params,info) {
+    params = checkParams(params);
+    var toRequest = _requestOpts(params);
+    toRequest.json = {
+        action : 'deleteFiles' ,
+        files : files ,
+        rootpath: params.rootPath
+    };
+    var buffer = ''; 
+    var emitter = through.obj(
+        function transform(data,enc,cb) {
+            buffer += data;
+            cb();
+        },
+        function flush(cb) {
+            var data = JSON.parse(buffer);
+
+            if (data.error) {
+                if (!data.error.length) data.error = [data.error];
+                data.error = data.error.map( err => {
+                    try {
+                        return JSON.parse(err);
+                    }catch(e) {
+                        //keep as it came
+                        return err;
+                    }
+                } );
+                data.error.forEach( e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)) );
+                info = info || {};
+                info.errors = info.errors || [];
+                info.errors = info.errors.concat(data.error);
+                //this.emit('error',data.error);
+            }
+            data.deletedFiles = data.deletedFiles || [];
+            if (data.deletedFiles.length === 0) {
+                console.log(`"${files}" not found - nothing removed.`);
+            }
+            data.deletedFiles.forEach( file => {
+                console.log(`Deleted file ${file.name}.`);
+            });
+            cb();
+        }
+    );
+    return request( toRequest ).pipe(emitter);
+}
+
 /* STUB */
 /*
 module.exports.deleteFolder = deleteFolder;
