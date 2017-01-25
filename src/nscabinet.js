@@ -131,7 +131,7 @@ function download(files, params, info) {
 
 module.exports.deleteFiles = deleteFiles;
 
-function deleteFiles(files, params, info) {
+function deleteFiles(files, params, info, resCallback) {
     params = checkParams(params);
     var toRequest = _requestOpts(params);
     toRequest.json = {
@@ -171,6 +171,8 @@ function deleteFiles(files, params, info) {
             data.deletedFiles.forEach(file => {
                 console.log(`Deleted file ${file.name}.`);
             });
+
+            resCallback(data.deletedFiles.length === 0 ? null: data.deletedFiles);
             cb();
         }
     );
