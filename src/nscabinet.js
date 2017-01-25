@@ -38,7 +38,7 @@ var PARAMS_DEF = [{
 module.exports = upload;
 module.exports.upload = upload;
 
-function upload(params, resCallback) {
+function upload(params) {
     params = checkParams(params);
 
     return through.obj(function (chunk, enc, callback) {
@@ -71,7 +71,7 @@ function upload(params, resCallback) {
             that.push(chunk);
             var logger = _responseLogger();
             response.pipe(logger).on('finish', () => {
-                resCallback(response.statusCode)
+                that.emit('finish', response);
                 callback();
             });
         });
@@ -111,7 +111,7 @@ function download(files, params, info) {
                 info = info || {};
                 info.errors = info.errors || [];
                 info.errors = info.errors.concat(data.error);
-                //this.emit('error',data.error);
+                this.emit('error', data.errors);
             }
             data.files = data.files || [];
             data.files.forEach(file => {
@@ -131,7 +131,7 @@ function download(files, params, info) {
 
 module.exports.deleteFiles = deleteFiles;
 
-function deleteFiles(files, params, info, resCallback) {
+function deleteFiles(files, params, info) {
     params = checkParams(params);
     var toRequest = _requestOpts(params);
     toRequest.json = {
@@ -162,17 +162,16 @@ function deleteFiles(files, params, info, resCallback) {
                 info = info || {};
                 info.errors = info.errors || [];
                 info.errors = info.errors.concat(data.error);
-                //this.emit('error',data.error);
+                this.emit('error', data.errors);
             }
             data.deletedFiles = data.deletedFiles || [];
             if (data.deletedFiles.length === 0) {
                 console.log(`"${files}" not found - nothing removed.`);
             }
             data.deletedFiles.forEach(file => {
-                console.log(`Deleted file ${file.name}.`);
+                console.log(`Deleted file ${file.columns.name}, id: ${file.id}.`);
             });
-
-            resCallback(data.deletedFiles.length === 0 ? null: data.deletedFiles);
+            this.emit('response', data.deletedFiles.length === 0 ? null : data.deletedFiles)
             cb();
         }
     );
