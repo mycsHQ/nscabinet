@@ -15,14 +15,18 @@ var post = function (datain) {
     //ROUTER
 
     switch (datain.action) {
-    case 'download':
-        return download(datain);
-    case 'upload':
-        return upload(datain);
-    case 'url':
-        return url(datain);
-    default:
-        return {message: 'invalid action'};
+        case 'download':
+            return download(datain);
+        case 'upload':
+            return upload(datain);
+        case 'url':
+            return url(datain);
+        case 'deleteFiles':
+            return deleteFiles(datain);
+        default:
+            return {
+                message: 'invalid action'
+            };
     }
 };
 
@@ -39,14 +43,57 @@ var upload = function (datain) {
     if (info.filename) {
         var file = nlapiCreateFile(info.filename, info.nsfileext, body);
         file.setFolder(info.folderid);
-        if (datain.isonline){
+        if (datain.isonline) {
             file.setIsOnline(true);
         }
         var r = JSON.stringify(nlapiSubmitFile(file));
         nlapiLogExecution('DEBUG', 'up!', r);
-        return {message: 'Uploaded ' + info.filename + ' to file id ' + r, fileid: Number(r)};
+        return {
+            message: 'Uploaded ' + info.filename + ' to file id ' + r,
+            fileid: Number(r)
+        };
     }
 };
+
+var deleteFiles = function (datain) {
+    var errors = [];
+
+    if (!(datain.files instanceof Array)) {
+        datain.files = [datain.files];
+    }
+
+    var files;
+    datain.files.forEach(function (glob) {
+
+        var info = pathInfo(glob, datain.rootpath);
+
+        var filter = [
+            ['folder', 'anyof', [info.folderid]], 'and', ['name', 'is', info.filename]
+        ];
+
+        var columns = ['name', 'filetype', 'folder'].map(function (i) {
+            return new nlobjSearchColumn(i);
+        });
+
+        files = nlapiSearchRecord('file', null, filter, columns) || [];
+
+        // double check
+        files = files.filter(function (resFile) {
+            return info.folderid == resFile.getValue('folder') && resFile.getValue('name') == info.filename;
+        });
+
+        files.forEach(function (file) {
+            nlapiDeleteFile(file.id);
+        });
+    });
+
+    var out = {
+        deletedFiles: files
+    };
+    if (errors.length) out.error = errors;
+    log(out);
+    return out;
+}
 
 var download = function (datain) {
     if (!(datain.files instanceof Array)) {
@@ -54,6 +101,7 @@ var download = function (datain) {
     }
 
     var errors = [];
+
     function getFileData(file, info, folder) {
         var contents = file.getValue();
 
@@ -62,7 +110,7 @@ var download = function (datain) {
 
         var base;
         if (info.tails) {
-            var curr = info.tails.filter(function(t){
+            var curr = info.tails.filter(function (t) {
                 return t.folderid == folder;
             })[0];
             if (!curr) throw nlapiCreateError('RECURSIVE_SEARCH', 'Unexpected execution.', true);
@@ -85,16 +133,16 @@ var download = function (datain) {
         //found out nlapiSearchRecord('file') filtered by folder returns a recursive search,
         //which turns out to be nasty for performance.
         //so, split in 2 cases. If the path seems to be absolute, load directly. If not, execute the search.
-        if ( /\*|\%/g.test(glob) ) {
+        if (/\*|\%/g.test(glob)) {
 
-            var folders_in = ( info.tails ) ?
-                info.tails.map( function(t) { return t.folderid; } ) :
-                [info.folderid];
+            var folders_in = (info.tails) ?
+                info.tails.map(function (t) {
+                    return t.folderid;
+                }) : [info.folderid];
 
             var filter = ['folder', 'anyof', folders_in];
 
-            if ( info.filename == '*' || info.filename == '*.*' || info.filename == '**' ) { /* -- */}
-            else if( /\*/g.test(info.filename) ) {
+            if (info.filename == '*' || info.filename == '*.*' || info.filename == '**') { /* -- */ } else if (/\*/g.test(info.filename)) {
                 filter.push('and');
                 filter.push(['name', 'contains', info.filename.replace(/\*/g, '%')]);
             } else {
@@ -108,12 +156,12 @@ var download = function (datain) {
 
             var files = nlapiSearchRecord('file', null, filter, columns) || [];
             var addFiles = files.filter(function (resFile) {
-                return folders_in.filter(function(f){
+                return folders_in.filter(function (f) {
                     return f == resFile.getValue('folder');
                 }).length > 0;
             }).map(function (resFile) {
                 var file = nlapiLoadFile(resFile.getId());
-                return getFileData(file, info, resFile.getValue('folder') );
+                return getFileData(file, info, resFile.getValue('folder'));
             });
 
             outfiles = outfiles.concat(addFiles);
@@ -128,7 +176,9 @@ var download = function (datain) {
         }
     });
 
-    var out = {files: outfiles};
+    var out = {
+        files: outfiles
+    };
     if (errors.length) out.error = errors;
     log(out);
     return out;
@@ -139,7 +189,7 @@ var download = function (datain) {
 function url(inp) {
     var file = nlapiLoadFile(inp.path);
     return {
-        url : file.getURL()
+        url: file.getURL()
     };
 }
 
@@ -193,8 +243,12 @@ var EXT_TYPES = {
 
 
 function pathInfo(pathIn, baseIn, createFolders) {
-    if (baseIn === void 0) { baseIn = '/'; }
-    if (createFolders === void 0) { createFolders = false; }
+    if (baseIn === void 0) {
+        baseIn = '/';
+    }
+    if (createFolders === void 0) {
+        createFolders = false;
+    }
     if (pathIn.charAt(0) == '/') {
         pathIn = pathIn.substr(1);
         baseIn = '/';
@@ -208,27 +262,26 @@ function pathInfo(pathIn, baseIn, createFolders) {
     _split.length = _split.length - 1;
     var absBase = _split.join('/');
     var absBaseSplit = _split.slice(1);
-    var hasWildcard = absBaseSplit.some(function (i) { return i == '**'; });
+    var hasWildcard = absBaseSplit.some(function (i) {
+        return i == '**';
+    });
     var _ext = filename ? filename.split('.')[1] : null;
     var prevFolder = null;
     if (!hasWildcard) {
         absBaseSplit.forEach(function (folderName) {
             var filters = [
                 ['name', 'is', folderName],
-                'and',
-                ['parent', 'anyof', (prevFolder || '@NONE@')]
+                'and', ['parent', 'anyof', (prevFolder || '@NONE@')]
             ];
             var res_folder = nlapiSearchRecord('folder', null, filters);
             if (!res_folder && !createFolders) {
                 throw nlapiCreateError('FOLDER_NOT_FOUND', 'Folder ' + folderName + ' not found!', true);
-            }
-            else if (!res_folder && createFolders) {
+            } else if (!res_folder && createFolders) {
                 var newFolderRec = nlapiCreateRecord('folder');
                 newFolderRec.setFieldValue('name', folderName);
                 newFolderRec.setFieldValue('parent', prevFolder);
                 prevFolder = nlapiSubmitRecord(newFolderRec);
-            }
-            else {
+            } else {
                 prevFolder = res_folder[0].getId();
             }
         });
@@ -242,9 +295,10 @@ function pathInfo(pathIn, baseIn, createFolders) {
             baseabsolute: absBase,
             baserelative: _relativePath(absBase, baseIn)
         };
-    }
-    else {
-        var preWildcard_1 = '', postWildcard_1 = '', isAfter_1 = false;
+    } else {
+        var preWildcard_1 = '',
+            postWildcard_1 = '',
+            isAfter_1 = false;
         absBaseSplit.forEach(function (item) {
             if (item == '**')
                 isAfter_1 = true;
@@ -281,6 +335,7 @@ function pathInfo(pathIn, baseIn, createFolders) {
 
 
 var __allFoldersMemo;
+
 function allFolders() {
     if (__allFoldersMemo) return __allFoldersMemo;
     var _allFolders = Search.big('folder', null, Search.cols(['name', 'parent']));
@@ -312,11 +367,15 @@ function _relativePath(src, relativeTo) {
     var o;
     if (src.substr(0, relativeTo.length) == relativeTo) {
         o = src.substr(relativeTo.length);
-    }
-    else {
-        var s_src = src.split('/').filter(function (i) { return i == true; });
-        var s_rel = relativeTo.split('/').filter(function (i) { return i == true; });
-        var count = 0, walk = '';
+    } else {
+        var s_src = src.split('/').filter(function (i) {
+            return i == true;
+        });
+        var s_rel = relativeTo.split('/').filter(function (i) {
+            return i == true;
+        });
+        var count = 0,
+            walk = '';
         for (var x = 0; x < s_src.length; x++) {
             if (s_rel[x] == s_src[x])
                 count++;
@@ -339,7 +398,8 @@ var Search = {};
 
 Search.big = function (recordtype, filters, columns) {
     var res = nlapiCreateSearch(recordtype, filters, columns).runSearch();
-    var res_chunk, start_idx = 0, res_final = [];
+    var res_chunk, start_idx = 0,
+        res_final = [];
     do {
         res_chunk = res.getResults(start_idx, start_idx + 1000) || [];
         res_final = res_final.concat(res_chunk);
@@ -356,11 +416,9 @@ Search.cols = function (cols) {
             if (split[1])
                 return new nlobjSearchColumn(split[1], split[0]);
             return new nlobjSearchColumn(split[0]);
-        }
-        else if (coluna instanceof nlobjSearchColumn) {
+        } else if (coluna instanceof nlobjSearchColumn) {
             return coluna;
-        }
-        else
+        } else
             throw nlapiCreateError('mapSearchCol', 'Entrada inválida');
     });
 };
@@ -372,15 +430,16 @@ Search.collection = function (result) {
         var name, join = curr.getJoin();
         if (join) {
             name = join + '.' + curr.getName();
-        }
-        else {
+        } else {
             name = curr.getName();
         }
         prev[name] = result.getValue(curr);
         if (result.getText(curr))
             prev.textref[name] = result.getText(curr);
         return prev;
-    }, { textref: {} });
+    }, {
+        textref: {}
+    });
     ret['id'] = result.getId();
     return ret;
 };
