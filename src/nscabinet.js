@@ -57,7 +57,7 @@ function upload(params) {
 
         console.log('Uploading ' + remotePath + ' to ' + params.rootPath);
 
-        var toRequest = _requestOpts(params);
+        var toRequest = requestOpts(params);
         toRequest.json = {
             action: 'upload',
             filepath: remotePath,
@@ -83,7 +83,7 @@ module.exports.download = download;
 
 function download(files, params, info) {
     params = checkParams(params);
-    var toRequest = _requestOpts(params);
+    var toRequest = requestOpts(params);
     toRequest.json = {
         action: 'download',
         files: files,
@@ -133,7 +133,7 @@ module.exports.deleteFiles = deleteFiles;
 
 function deleteFiles(files, params, info) {
     params = checkParams(params);
-    var toRequest = _requestOpts(params);
+    var toRequest = requestOpts(params);
     toRequest.json = {
         action: 'deleteFiles',
         files: files,
@@ -210,7 +210,7 @@ module.exports.url = url;
 
 function url(path, params) {
     params = checkParams(params);
-    var toRequest = _requestOpts(params);
+    var toRequest = requestOpts(params);
     toRequest.json = {
         action: 'url',
         path: params.rootPath.substr(1) + '/' + path
@@ -223,8 +223,9 @@ function url(path, params) {
     });
 }
 
+module.exports.requestOpts = requestOpts;
 
-function _requestOpts(params) {
+function requestOpts(params) {
     var nlauthRolePortion = (params.role) ? `,nlauth_role=${params.role}` : '',
         server = process.env.NS_SERVER || `https://rest.${params.realm}/app/site/hosting/restlet.nl`;
     //NS_SERVER = testing + nsmockup
