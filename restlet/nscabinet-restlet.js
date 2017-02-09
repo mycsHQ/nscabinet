@@ -56,8 +56,6 @@ var upload = function (datain) {
 };
 
 var deleteFiles = function (datain) {
-    var errors = [];
-
     if (!(datain.files instanceof Array)) {
         datain.files = [datain.files];
     }
@@ -90,7 +88,6 @@ var deleteFiles = function (datain) {
     var out = {
         deletedFiles: files
     };
-    if (errors.length) out.error = errors;
     log(out);
     return out;
 }
