@@ -9,9 +9,9 @@ var request = require('request'),
     path = require('path');
 
 var PARAMS_DEF = [{
-        name: 'rootPath',
-        def: '/SuiteScripts'
-    },
+    name: 'rootPath',
+    def: '/SuiteScripts'
+},
     {
         name: 'script',
         required: true
@@ -40,7 +40,7 @@ module.exports.upload = upload;
 
 function upload(params) {
     params = checkParams(params);
-
+    
     return through.obj(function (chunk, enc, callback) {
         if (chunk.isDirectory()) {
             this.push(chunk);
@@ -65,13 +65,12 @@ function upload(params) {
             rootpath: params.rootPath,
             isonline: params.isonline
         };
-
+        
         request(toRequest).on('response', response => {
             chunk.nscabinetResponse = response;
-            that.push(chunk);
             var logger = _responseLogger();
             response.pipe(logger).on('finish', () => {
-                that.emit('finish', response);
+                that.emit('response', response);
                 callback();
             });
         });
@@ -171,7 +170,7 @@ function deleteFiles(files, params, info) {
             data.deletedFiles.forEach(file => {
                 console.log(`Deleted file ${file.columns.name}, id: ${file.id}.`);
             });
-            this.emit('response', data.deletedFiles.length === 0 ? null : data.deletedFiles)
+            this.emit('response', data.deletedFiles.length === 0 ? null : data.deletedFiles);
             cb();
         }
     );
