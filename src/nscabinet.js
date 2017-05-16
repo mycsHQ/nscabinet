@@ -145,8 +145,12 @@ function deleteFiles(files, params, info) {
             cb();
         },
         function flush(cb) {
-            var data = JSON.parse(buffer);
-
+            var data;
+            try {
+                data = JSON.parse(buffer);
+            } catch (e) {
+                data = { error: [e] };
+            }
             if (data.error) {
                 if (!data.error.length) data.error = [data.error];
                 data.error = data.error.map(err => {
@@ -162,15 +166,18 @@ function deleteFiles(files, params, info) {
                 info.errors = info.errors || [];
                 info.errors = info.errors.concat(data.error);
                 this.emit('error', data.errors);
+            } else {
+                data.deletedFiles = data.deletedFiles || [];
+                data.erroredFiles = data.erroredFiles || [];
+                data.deletedFiles.forEach(file => {
+                    console.log(`Successfully deleted file: ${file.columns.name}, id: ${file.id}.`);
+                });
+                console.log(data.erroredFiles);
+                data.erroredFiles.forEach(file => {
+                    console.log(`Error while deleting: ${file.columns.name}, id: ${file.id}.`);
+                });
+                this.emit('response', data);
             }
-            data.deletedFiles = data.deletedFiles || [];
-            if (data.deletedFiles.length === 0) {
-                console.log(`"${files}" not found - nothing removed.`);
-            }
-            data.deletedFiles.forEach(file => {
-                console.log(`Deleted file ${file.columns.name}, id: ${file.id}.`);
-            });
-            this.emit('response', data.deletedFiles.length === 0 ? null : data.deletedFiles);
             cb();
         }
     );
