@@ -172,7 +172,6 @@ function deleteFiles(files, params, info) {
                 data.deletedFiles.forEach(file => {
                     console.log(`Successfully deleted file: ${file.columns.name}, id: ${file.id}.`);
                 });
-                console.log(data.erroredFiles);
                 data.erroredFiles.forEach(file => {
                     console.log(`Error while deleting: ${file.columns.name}, id: ${file.id}.`);
                 });
