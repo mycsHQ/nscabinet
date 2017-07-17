@@ -39,6 +39,7 @@ module.exports = upload;
 module.exports.upload = upload;
 
 function upload(params) {
+    var trimPath = params.trimPath || '';
     params = checkParams(params);
     
     return through.obj(function (chunk, enc, callback) {
@@ -49,8 +50,11 @@ function upload(params) {
 
         var that = this,
             fullCwd = path.resolve((params.isCLI && !params.flatten) ? nsconfig.CONF_CWD : chunk.cwd),
-            remotePath = chunk.path.substr(fullCwd.length + 1);
+            remotePath = chunk.path.replace(path.resolve(fullCwd, trimPath || ''), '');
 
+        if (remotePath[0] === '/') {
+            remotePath = remotePath.substring('1');
+        }
         if (params.flatten) {
             remotePath = path.basename(remotePath);
         }
