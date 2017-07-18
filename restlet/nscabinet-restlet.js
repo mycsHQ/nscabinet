@@ -283,8 +283,7 @@ function pathInfo(pathIn, baseIn, createFolders) {
     var hasWildcard = absBaseSplit.some(function (i) {
         return i == '**';
     });
-    var fileExtIdx = filename.lastIndexOf('.') + 1;
-    var _ext = fileExtIdx ? filename.substring(fileExtIdx) : null;
+    var _ext = filename ? filename.split('.').pop() : null;
     var prevFolder = null;
     if (!hasWildcard) {
         absBaseSplit.forEach(function (folderName) {
