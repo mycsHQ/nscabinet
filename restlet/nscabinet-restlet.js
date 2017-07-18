@@ -276,14 +276,15 @@ function pathInfo(pathIn, baseIn, createFolders) {
     var absPath = (baseIn + pathIn)
     .replace(/[\\]/g, '/');
     var _split = absPath.split('/');
-    var filename = _split[_split.length - 1];
+    var filename = _split[_split.length - 1] || '';
     _split.length = _split.length - 1;
     var absBase = _split.join('/');
     var absBaseSplit = _split.slice(1);
     var hasWildcard = absBaseSplit.some(function (i) {
         return i == '**';
     });
-    var _ext = filename ? filename.split('.')[1] : null;
+    var fileExtIdx = filename.lastIndexOf('.') + 1;
+    var _ext = fileExtIdx ? filename.substring(fileExtIdx) : null;
     var prevFolder = null;
     if (!hasWildcard) {
         absBaseSplit.forEach(function (folderName) {
