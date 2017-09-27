@@ -73,8 +73,12 @@ function upload(params) {
         request(toRequest).on('response', response => {
             chunk.nscabinetResponse = response;
             var logger = _responseLogger();
-            response.pipe(logger).on('finish', () => {
+            response.pipe(logger).on('response', () => {
                 that.emit('response', response);
+                callback();
+            }).on('error', (data) => {
+                data.remoteFilePath = remotePath;
+                that.emit('response', data);
                 callback();
             });
         });
@@ -266,8 +270,14 @@ function _responseLogger() {
         } catch (e) {
             throw Error('Unable to parse response: ' + e);
         }
-        if (data.message) console.log(data.message);
-        if (data.error) console.log(`${data.error.code} - ${data.error.message}`);
+        if (data.message) {
+            console.log(data.message);
+            this.emit('response', data.message);
+        }
+        if (data.error) {
+            console.log(`${data.error.code} - ${data.error.message}`);
+            this.emit('error', data.error);
+        }
         cb();
     });
 

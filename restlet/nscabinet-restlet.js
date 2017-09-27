@@ -14,18 +14,28 @@ var post = function (datain) {
 
   //ROUTER
 
-    switch (datain.action) {
-    case 'download':
-        return download(datain);
-    case 'upload':
-        return upload(datain);
-    case 'url':
-        return url(datain);
-    case 'deleteFiles':
-        return deleteFiles(datain);
-    default:
+    try {
+        switch (datain.action) {
+        case 'download':
+            return download(datain);
+        case 'upload':
+            return upload(datain);
+        case 'url':
+            return url(datain);
+        case 'deleteFiles':
+            return deleteFiles(datain);
+        default:
+            return {
+                message: 'invalid action'
+            };
+        }
+    } catch (err) {
+        nlapiLogExecution('ERROR', err.message, err);
         return {
-            message: 'invalid action'
+            error: {
+                code: 500,
+                message: 'Error processing "'+ datain.action + '", "' + pathInfo(datain.filepath, datain.rootpath, true).filename + '":\n' + err.message
+            }
         };
     }
 };
