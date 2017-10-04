@@ -8,10 +8,11 @@ var request = require('request'),
     nsconfig = require('nsconfig'),
     path = require('path');
 
-var PARAMS_DEF = [{
-    name: 'rootPath',
-    def: '/SuiteScripts'
-},
+var PARAMS_DEF = [
+    {
+        name: 'rootPath',
+        def: '/SuiteScripts'
+    },
     {
         name: 'script',
         required: true
@@ -34,22 +35,21 @@ var PARAMS_DEF = [{
     }
 ];
 
-
 module.exports = upload;
 module.exports.upload = upload;
 
 function upload(params) {
     var trimPath = params.trimPath || '';
     params = checkParams(params);
-    
-    return through.obj(function (chunk, enc, callback) {
+
+    return through.obj(function(chunk, enc, callback) {
         if (chunk.isDirectory()) {
             this.push(chunk);
             return callback();
         }
 
         var that = this,
-            fullCwd = path.resolve((params.isCLI && !params.flatten) ? nsconfig.CONF_CWD : chunk.cwd),
+            fullCwd = path.resolve(params.isCLI && !params.flatten ? nsconfig.CONF_CWD : chunk.cwd),
             remotePath = chunk.path.replace(path.resolve(fullCwd, trimPath || ''), '');
 
         if (remotePath[0] === '/') {
@@ -69,22 +69,24 @@ function upload(params) {
             rootpath: params.rootPath,
             isonline: params.isonline
         };
-        
+
         request(toRequest).on('response', response => {
             chunk.nscabinetResponse = response;
             var logger = _responseLogger();
-            response.pipe(logger).on('response', () => {
-                that.emit('response', response);
-                callback();
-            }).on('error', (data) => {
-                data.remoteFilePath = remotePath;
-                that.emit('response', data);
-                callback();
-            });
+            response
+        .pipe(logger)
+        .on('response', () => {
+            that.emit('response', response);
+            callback();
+        })
+        .on('error', data => {
+            data.remoteFilePath = remotePath;
+            that.emit('response', data);
+            callback();
+        });
         });
     });
 }
-
 
 module.exports.download = download;
 
@@ -98,41 +100,41 @@ function download(files, params, info) {
     };
     var buffer = '';
     var emitter = through.obj(
-        function transform(data, enc, cb) {
-            buffer += data;
-            cb();
-        },
-        function flush(cb) {
-            var data = JSON.parse(buffer);
-            if (data.error) {
-                if (!data.error.length) data.error = [data.error];
-                data.error = data.error.map(err => {
-                    try {
-                        return JSON.parse(err);
-                    } catch (e) {
-                        //keep as it came
-                        return err;
-                    }
-                });
-                data.error.forEach(e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)));
-                info = info || {};
-                info.errors = info.errors || [];
-                info.errors = info.errors.concat(data.error);
-                this.emit('error', data.errors);
-            }
-            data.files = data.files || [];
-            data.files.forEach(file => {
-                var localPath = file.path.startsWith('/') ? 'cabinet_root' + file.path : file.path;
-                var vynFile = new vinyl({
-                    path: localPath,
-                    contents: new Buffer(file.contents, 'base64')
-                });
-                console.log(`Got file ${file.path}.`);
-                this.push(vynFile);
+    function transform(data, enc, cb) {
+        buffer += data;
+        cb();
+    },
+    function flush(cb) {
+        var data = JSON.parse(buffer);
+        if (data.error) {
+            if (!data.error.length) data.error = [data.error];
+            data.error = data.error.map(err => {
+                try {
+                    return JSON.parse(err);
+                } catch (e) {
+            //keep as it came
+                    return err;
+                }
             });
-            cb();
+            data.error.forEach(e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)));
+            info = info || {};
+            info.errors = info.errors || [];
+            info.errors = info.errors.concat(data.error);
+            this.emit('error', data.errors);
         }
-    );
+        data.files = data.files || [];
+        data.files.forEach(file => {
+            var localPath = file.path.startsWith('/') ? 'cabinet_root' + file.path : file.path;
+            var vynFile = new vinyl({
+                path: localPath,
+                contents: new Buffer(file.contents, 'base64')
+            });
+            console.log(`Got file ${file.path}.`);
+            this.push(vynFile);
+        });
+        cb();
+    }
+  );
     return request(toRequest).pipe(emitter);
 }
 
@@ -148,46 +150,46 @@ function deleteFiles(files, params, info) {
     };
     var buffer = '';
     var emitter = through.obj(
-        function transform(data, enc, cb) {
-            buffer += data;
-            cb();
-        },
-        function flush(cb) {
-            var data;
-            try {
-                data = JSON.parse(buffer);
-            } catch (e) {
-                data = { error: [e] };
-            }
-            if (data.error) {
-                if (!data.error.length) data.error = [data.error];
-                data.error = data.error.map(err => {
-                    try {
-                        return JSON.parse(err);
-                    } catch (e) {
-                        //keep as it came
-                        return err;
-                    }
-                });
-                data.error.forEach(e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)));
-                info = info || {};
-                info.errors = info.errors || [];
-                info.errors = info.errors.concat(data.error);
-                this.emit('error', data.errors);
-            } else {
-                data.deletedFiles = data.deletedFiles || [];
-                data.erroredFiles = data.erroredFiles || [];
-                data.deletedFiles.forEach(file => {
-                    console.log(`Successfully deleted file: ${file.columns.name}, id: ${file.id}.`);
-                });
-                data.erroredFiles.forEach(file => {
-                    console.log(`Error while deleting: ${file.columns.name}, id: ${file.id}.`);
-                });
-                this.emit('response', data);
-            }
-            cb();
+    function transform(data, enc, cb) {
+        buffer += data;
+        cb();
+    },
+    function flush(cb) {
+        var data;
+        try {
+            data = JSON.parse(buffer);
+        } catch (e) {
+            data = { error: [e] };
         }
-    );
+        if (data.error) {
+            if (!data.error.length) data.error = [data.error];
+            data.error = data.error.map(err => {
+                try {
+                    return JSON.parse(err);
+                } catch (e) {
+            //keep as it came
+                    return err;
+                }
+            });
+            data.error.forEach(e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)));
+            info = info || {};
+            info.errors = info.errors || [];
+            info.errors = info.errors.concat(data.error);
+            this.emit('error', data.errors);
+        } else {
+            data.deletedFiles = data.deletedFiles || [];
+            data.erroredFiles = data.erroredFiles || [];
+            data.deletedFiles.forEach(deleted => {
+                console.log(`Successfully deleted file: ${deleted.file}, id: ${deleted.id}.`);
+            });
+            data.erroredFiles.forEach(errored => {
+                console.log(`Error while deleting: ${errored.file}, id: ${errored.id || 'N/A'}.\n${errored.message}`);
+            });
+            this.emit('response', data);
+        }
+        cb();
+    }
+  );
     return request(toRequest).pipe(emitter);
 }
 
@@ -205,7 +207,6 @@ function deleteFolder (folders, params) {
     };
 }
 */
-
 
 module.exports.checkParams = checkParams;
 
@@ -239,9 +240,9 @@ function url(path, params) {
 module.exports.requestOpts = requestOpts;
 
 function requestOpts(params) {
-    var nlauthRolePortion = (params.role) ? `,nlauth_role=${params.role}` : '',
+    var nlauthRolePortion = params.role ? `,nlauth_role=${params.role}` : '',
         server = process.env.NS_SERVER || `https://rest.${params.realm}/app/site/hosting/restlet.nl`;
-    //NS_SERVER = testing + nsmockup
+  //NS_SERVER = testing + nsmockup
 
     return {
         url: server,
@@ -256,15 +257,15 @@ function requestOpts(params) {
     };
 }
 
-
 function _responseLogger() {
-
     var buffer = '';
-    return through(function transform(data, enc, cb) {
+    return through(
+    function transform(data, enc, cb) {
         buffer += data;
         this.push(data);
         cb();
-    }, function flush(cb) {
+    },
+    function flush(cb) {
         try {
             var data = JSON.parse(buffer);
         } catch (e) {
@@ -279,6 +280,6 @@ function _responseLogger() {
             this.emit('error', data.error);
         }
         cb();
-    });
-
+    }
+  );
 }
