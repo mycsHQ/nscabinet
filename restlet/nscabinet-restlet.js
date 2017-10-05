@@ -71,8 +71,8 @@ var deleteFiles = function(datain) {
     var deleteFiles = [];
     var deletedFiles = [];
     var erroredFiles = [];
-    datain.files.forEach(function(glob) {
-        var info = pathInfo(glob, datain.rootpath);
+    datain.files.forEach(function(remoteFilePath) {
+        var info = pathInfo(remoteFilePath, datain.rootpath);
 
         var filter = [['folder', 'anyof', [info.folderid]], 'and', ['name', 'is', info.filename]];
 
@@ -83,24 +83,24 @@ var deleteFiles = function(datain) {
         var foundFiles = nlapiSearchRecord('file', null, filter, columns) || [];
 
     // double check
-        var foundFile = foundFiles.filter(function(resFile) {
+        var foundItem = foundFiles.filter(function(resFile) {
             return info.folderid == resFile.getValue('folder') && resFile.getValue('name') == info.filename;
         })[0];
 
-        if (foundFile) {
-            deleteFiles.push(foundFile);
+        if (foundItem) {
+            deleteFiles.push({ id: foundItem.id, file: info.filename, code: '200', message: 'DELETED', remoteFilePath: remoteFilePath });
         } else {
-            erroredFiles.push({ file: info.filename, code: '404', message: 'NOT_FOUND' });
+            erroredFiles.push({ file: info.filename, code: '404', message: 'NOT_FOUND', remoteFilePath: remoteFilePath });
         }
     });
 
-    deleteFiles.forEach(function(file) {
+    deleteFiles.forEach(function(item) {
         try {
-            nlapiDeleteFile({ id: file.id, file: file.columns.name, code: '200', message: 'DELETED' });
-            deletedFiles.push(file);
-        } catch (e) {
-            log({ error: e });
-            erroredFiles.push({ id: file.id, file: file.columns.name, code: '500', message: e });
+            nlapiDeleteFile(item.id);
+            deletedFiles.push(item);
+        } catch (error) {
+            log({ error: error });
+            erroredFiles.push({ id: item.id, file: item.file, code: '500', message: error.message });
         }
     });
 
