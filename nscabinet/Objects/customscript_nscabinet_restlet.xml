@@ -1,0 +1,26 @@
+<restlet scriptid="customscript_nscabinet_restlet">
+  <deletefunction></deletefunction>
+  <description>The RESTlet that is used to supply nscabinet with the ability to delete files</description>
+  <getfunction></getfunction>
+  <isinactive>F</isinactive>
+  <name>nscabinet-restlet</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <postfunction>post</postfunction>
+  <putfunction></putfunction>
+  <scriptfile>[/SuiteScripts/nscabinet/nscabinet-restlet.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_nscabinet_restlet">
+      <allemployees>F</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>F</allroles>
+      <audslctrole>ADMINISTRATOR</audslctrole>
+      <isdeployed>T</isdeployed>
+      <loglevel>ERROR</loglevel>
+      <status>RELEASED</status>
+      <title>nscabinet-restlet</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</restlet>

@@ -1,285 +1,256 @@
-/* eslint-env es6,node */
+const { checkParams, getRestletOptions, getSdfOptions, required, normalizePath, checkPath, cp, mkdirRecursive } = require('./misc');
+const { getAllFilesSync, isFileModified } = require('./hash');
+const rp = require('request-promise-native');
+const { sdf, cliCommands: cmd, sdfCreateAccountCustomisationProject } = require('node-sdf');
+const fs = require('fs');
+const path = require('path');
+const rimraf = require('rimraf');
 
-'use strict';
+const suiteScriptsRoot = '/SuiteScripts';
 
-var request = require('request'),
-    through = require('through2'),
-    vinyl = require('vinyl'),
-    nsconfig = require('nsconfig'),
-    path = require('path');
+class NsCabinet {
+  /**
+   * Create NsCabinet instance with credentials
+   * @param {object} params
+   * @return {NsCabinet}
+   */
+  constructor(params = required('params')) {
+    const checkedParams = checkParams(params);
+    this._restletOptions = getRestletOptions(checkedParams);
+    this._sdfOptions = getSdfOptions(checkedParams);
+  }
 
-var PARAMS_DEF = [
-    {
-        name: 'rootPath',
-        def: '/SuiteScripts'
-    },
-    {
-        name: 'script',
-        required: true
-    },
-    {
-        name: 'deployment',
-        def: 1
-    },
-    {
-        name: 'isCLI',
-        def: false
-    },
-    {
-        name: 'isonline',
-        def: false
-    },
-    {
-        name: 'flatten',
-        def: false
-    }
-];
+  /**
+   * Upload the restlet and do deployment
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async uploadRestlet(sdfOptions = this.sdfOptions) {
+    return this.deployProject('compiled-restlet', sdfOptions);
+  }
 
-module.exports = upload;
-module.exports.upload = upload;
+  /**
+   * Deploy the project to netsuite
+   * @param {string} project paths to the project has to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async deployProject(project = required('project'), { password, options } = this.sdfOptions) {
+    return sdf(cmd.deploy, password, { ...options, p: checkPath(project), np: '' });
+  }
 
-function upload(params) {
-    var trimPath = params.trimPath || '';
-    params = checkParams(params);
+  /**
+   * Upload files to SuiteScripts directory, retaining the directory structure of the files
+   * (paths to the files have to be absolute)
+   * !This overwrites existing files in the file cabinet
+   * @param {string} rootPath rootpath to the file that is _not_ mirrored in FileCabinet
+   * @param {array<string>} files paths to the files have to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async uploadFiles(rootPath = required('rootPath'), files = required('files'), sdfOptions = this.sdfOptions) {
+    const { newProjectPath, fileBasePath } = await sdfCreateAccountCustomisationProject('temp-upload', __dirname);
 
-    return through.obj(function(chunk, enc, callback) {
-        if (chunk.isDirectory()) {
-            this.push(chunk);
-            return callback();
-        }
+    const copiedFiles = files.map(file => {
+      const fileName = path.basename(checkPath(file));
+      const normalizedRootpath = normalizePath(checkPath(rootPath));
+      const normalizedFilePath = normalizePath(file.replace(fileName, '').replace(normalizedRootpath.join('/'), ''));
+      const normalizedFileBasePath = normalizePath(fileBasePath);
+      const normalizedNewFilePath = [
+        ...normalizedFileBasePath,
+        ...normalizedFilePath
+          .join(path.sep)
+          .replace(normalizedFileBasePath.join(path.sep), '')
+          .split(path.sep)
+      ];
 
-        var that = this,
-            fullCwd = path.resolve(params.isCLI && !params.flatten ? nsconfig.CONF_CWD : chunk.cwd),
-            remotePath = chunk.path.replace(path.resolve(fullCwd, trimPath || ''), '');
-
-        if (remotePath[0] === '/') {
-            remotePath = remotePath.substring('1');
-        }
-        if (params.flatten) {
-            remotePath = path.basename(remotePath);
-        }
-
-        console.log('Uploading ' + remotePath + ' to ' + params.rootPath);
-
-        var toRequest = requestOpts(params);
-        toRequest.json = {
-            action: 'upload',
-            filepath: remotePath,
-            content: chunk.contents.toString('base64'),
-            rootpath: params.rootPath,
-            isonline: params.isonline
-        };
-
-        request(toRequest).on('response', response => {
-            chunk.nscabinetResponse = response;
-            var logger = _responseLogger();
-            response
-        .pipe(logger)
-        .on('response', () => {
-            that.emit('response', response);
-            callback();
-        })
-        .on('error', data => {
-            data.remoteFilePath = remotePath;
-            that.emit('response', data);
-            callback();
-        });
-        });
+      const sourceFile = path.resolve(path.sep, ...normalizedRootpath, ...normalizedFilePath, fileName);
+      const destFile = path.resolve(path.sep, ...normalizedNewFilePath, fileName);
+      cp(sourceFile, destFile);
+      return destFile;
     });
-}
+    await this.deployProject(newProjectPath, sdfOptions);
+    rimraf.sync(newProjectPath);
+    console.log(`Uploaded ${ files.length } files`);
+    return copiedFiles.map(file => file.replace(fileBasePath, suiteScriptsRoot));
+  }
 
-module.exports.download = download;
+  /**
+   * List the files of a specific directory
+   * @param {string} folder path to the source folder has to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {array<string>}
+   */
+  async listFiles(folder = required('folder'), { password, options } = this.sdfOptions) {
+    const fileList = await sdf(cmd.listfiles, password, { ...options, folder: checkPath(folder, suiteScriptsRoot) });
+    const files = fileList.match(new RegExp(`${ folder }\/.*`, 'g'));
+    return files;
+  }
 
-function download(files, params, info) {
-    params = checkParams(params);
-    var toRequest = requestOpts(params);
-    toRequest.json = {
-        action: 'download',
-        files: files,
-        rootpath: params.rootPath
-    };
-    var buffer = '';
-    var emitter = through.obj(
-    function transform(data, enc, cb) {
-        buffer += data;
-        cb();
-    },
-    function flush(cb) {
-        var data = JSON.parse(buffer);
-        if (data.error) {
-            if (!data.error.length) data.error = [data.error];
-            data.error = data.error.map(err => {
-                try {
-                    return JSON.parse(err);
-                } catch (e) {
-            //keep as it came
-                    return err;
-                }
-            });
-            data.error.forEach(e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)));
-            info = info || {};
-            info.errors = info.errors || [];
-            info.errors = info.errors.concat(data.error);
-            this.emit('error', data.errors);
-        }
-        data.files = data.files || [];
-        data.files.forEach(file => {
-            var localPath = file.path.startsWith('/') ? 'cabinet_root' + file.path : file.path;
-            var vynFile = new vinyl({
-                path: localPath,
-                contents: new Buffer(file.contents, 'base64')
-            });
-            console.log(`Got file ${file.path}.`);
-            this.push(vynFile);
-        });
-        cb();
+  async syncFolders(
+    sourceFolder = required('sourceFolder'),
+    destinationFolder = required('destinationFolder'),
+    withHash = required('withHash'),
+    sdfOptions = this.sdfOptions
+  ) {
+    const filesInDir = getAllFilesSync(sourceFolder, true);
+    const hashes = await this.getHash(sdfOptions);
+
+    const filesToUpload = filesInDir.filter(({ filePath }) => filePath && isFileModified(filePath, hashes));
+
+    if (filesToUpload.length <= 0) {
+      console.log('>>>>>>> Nothing to upload');
+      return;
     }
-  );
-    return request(toRequest).pipe(emitter);
-}
 
-module.exports.deleteFiles = deleteFiles;
+    await this.uploadFiles(sourceFolder, filesToUpload, sdfOptions);
 
-function deleteFiles(files, params, info) {
-    params = checkParams(params);
-    var toRequest = requestOpts(params);
-    toRequest.json = {
-        action: 'deleteFiles',
-        files: files,
-        rootpath: params.rootPath
-    };
-    var buffer = '';
-    var emitter = through.obj(
-    function transform(data, enc, cb) {
-        buffer += data;
-        cb();
-    },
-    function flush(cb) {
-        var data;
-        try {
-            data = JSON.parse(buffer);
-        } catch (e) {
-            data = { error: [e] };
-        }
-        if (data.error) {
-            if (!data.error.length) data.error = [data.error];
-            data.error = data.error.map(err => {
-                try {
-                    return JSON.parse(err);
-                } catch (e) {
-            //keep as it came
-                    return err;
-                }
-            });
-            data.error.forEach(e => console.error('RESTLET ERROR: ' + (e.details || e.message || e)));
-            info = info || {};
-            info.errors = info.errors || [];
-            info.errors = info.errors.concat(data.error);
-            this.emit('error', data.errors);
-        } else {
-            data.deletedFiles = data.deletedFiles || [];
-            data.erroredFiles = data.erroredFiles || [];
-            data.deletedFiles.forEach(deleted => {
-                console.log(`Successfully deleted file: ${deleted.file}, id: ${deleted.id}.`);
-            });
-            data.erroredFiles.forEach(errored => {
-                console.log(`Error while deleting: ${errored.file}, id: ${errored.id || 'N/A'}.\n${errored.message}`);
-            });
-            this.emit('response', data);
-        }
-        cb();
+    // check if there are less files in repo than before
+    if (withHash && hashes.length > filesInDir.length) {
+      const files = filesInDir.map(({ filePath }) => filePath);
+      const inters = hashes.filter(({ filePath }) => !files.includes(filePath));
+      console.log(`>>>>>>> ${ inters.length } file${ inters.length > 1 ? 's' : '' } marked for removal`);
+      const { gotDeleted, withError } = await this.deleteFiles(inters.map(({ remoteFilePath }) => remoteFilePath));
+      const successful = gotDeleted.length;
+      console.log(`>>>>>>> Successfully Deleted ${ successful } file${ successful > 1 ? 's' : '' }`);
+      const failed = withError.length;
+      console.log(`>>>>>>> Failed deleting ${ failed } file${ failed > 1 ? 's' : '' }`);
+
+      const excludeFromHash = withError.map(({ remoteFilePath }) => remoteFilePath);
+      await this.updateHashFile(sourceFolder, true, excludeFromHash, sdfOptions);
     }
-  );
-    return request(toRequest).pipe(emitter);
-}
+  }
 
-/* STUB */
-/*
-module.exports.deleteFolder = deleteFolder;
-function deleteFolder (folders, params) {
-    params = checkParams(params);
-    if (!Array.isArray(folders)) folders = [folders];
-    var toRequest = _requestOpts(params);
-    toRequest.json = {
-        action : 'deleteFolder' ,
-        rootpath : params.rootPath ,
-        folders : folders
-    };
-}
-*/
+  /**
+   * Import the files specified in the paths array to the specified project
+   * @param {array<string>} paths paths to the files have to be absolute
+   * @param {string} project path to the destination project has to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async importFiles(paths = required('paths'), project = required('project'), { password, options } = this.sdfOptions) {
+    const pathString = `${ paths.reduce((red, path) => `${ red }\"${ checkPath(path) }\" `, '') }`;
+    return sdf(cmd.importfiles, password, { ...options, paths: pathString, p: project });
+  }
 
-module.exports.checkParams = checkParams;
-
-function checkParams(override, noThrow) {
-    var out = nsconfig(override, PARAMS_DEF, noThrow);
-    if (!out.rootPath.startsWith('/')) throw Error('rootPath must begin with /');
-    return out;
-}
-
-/**
- * this function does not work with streams/gulp,
- * instead it simply gets string and returns promise.
- */
-module.exports.url = url;
-
-function url(path, params) {
-    params = checkParams(params);
-    var toRequest = requestOpts(params);
-    toRequest.json = {
-        action: 'url',
-        path: params.rootPath.substr(1) + '/' + path
-    };
-    return new Promise((resolve, reject) => {
-        request(toRequest, (err, resp, body) => {
-            if (err) return reject(err);
-            resolve(`https://system.${params.realm}${body.url}`);
-        });
+  /**
+   * Download the files specified in the paths array to the specified directory
+   * @param {array<string>} paths paths to the files have to be absolute
+   * @param {string} directory path to the destination directory has to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async downloadFiles(paths = required('paths'), directory = required('directory'), { password, options } = this.sdfOptions) {
+    const { newProjectPath, fileBasePath } = await sdfCreateAccountCustomisationProject('temp-upload', __dirname);
+    const pathString = `${ paths.reduce((red, path) => `${ red }\"${ checkPath(path) }\" `, '') }`;
+    await sdf(cmd.importfiles, password, { ...options, paths: pathString, p: newProjectPath });
+    const res = paths.map(p => {
+      const relPath = p.replace(suiteScriptsRoot, '');
+      const sourceFile = path.join(fileBasePath, relPath);
+      const destFile = path.join(directory, relPath);
+      cp(sourceFile, destFile);
+      return destFile;
     });
-}
+    rimraf.sync(newProjectPath);
+    return res;
+  }
 
-module.exports.requestOpts = requestOpts;
+  /**
+   * Import all files from a folder to the specified project
+   * @param {string} folder path to the source folder has to be absolute
+   * @param {string} directory path to the destination directory has to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async importAllFiles(folder = required('folder'), project = required('project'), sdfOptions = this.sdfOptions) {
+    const files = await this.listFiles(folder);
+    return this.importFiles(files, project, sdfOptions);
+  }
 
-function requestOpts(params) {
-    var nlauthRolePortion = params.role ? `,nlauth_role=${params.role}` : '',
-        server = process.env.NS_SERVER || `https://rest.${params.realm}/app/site/hosting/restlet.nl`;
-  //NS_SERVER = testing + nsmockup
+  /**
+   * Download all files from a folder to the specified directory
+   * @param {string} folder path to the source folder has to be absolute
+   * @param {string} directory path to the destination directory has to be absolute
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async downloadAllFiles(folder = required('folder'), directory = required('directory'), sdfOptions = this.sdfOptions) {
+    const files = await this.listFiles(folder);
+    return this.downloadFiles(files, directory, sdfOptions);
+  }
 
-    return {
-        url: server,
-        qs: {
-            script: params.script,
-            deploy: params.deployment
-        },
-        method: 'POST',
-        headers: {
-            authorization: `NLAuth nlauth_account=${params.account},nlauth_email=${params.email},nlauth_signature=${params.password}${nlauthRolePortion}`
-        }
-    };
-}
+  /**
+   * create and upload the hashes to ns filecabinet
+   *
+   * @param {string} sourceDir the path to the files - has to be absolute
+   * @param {boolean} [excludeDotFiles=true] exclude dotfiles from hash
+   * @param {array} [failedFiles=[]] exclude the failed files from hash
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {promise}
+   */
+  async updateHashFile(sourceDir, excludeDotFiles = true, failedFiles = [], sdfOptions = this.sdfOptions) {
+    const files = getAllFilesSync(checkPath(sourceDir), true, suiteScriptsRoot, excludeDotFiles).filter(
+      ({ remoteFilePath }) => !failedFiles.includes(remoteFilePath)
+    );
+    const dir = `${ __dirname }/nscabinet`;
+    const hashFile = `${ dir }/hashes.json`;
 
-function _responseLogger() {
-    var buffer = '';
-    return through(
-    function transform(data, enc, cb) {
-        buffer += data;
-        this.push(data);
-        cb();
-    },
-    function flush(cb) {
-        try {
-            var data = JSON.parse(buffer);
-        } catch (e) {
-            throw Error('Unable to parse response: ' + e);
-        }
-        if (data.message) {
-            console.log(data.message);
-            this.emit('response', data.message);
-        }
-        if (data.error) {
-            console.log(`${data.error.code} - ${data.error.message}`);
-            this.emit('error', data.error);
-        }
-        cb();
+    // create needed directory structure
+    mkdirRecursive(dir);
+    fs.writeFileSync(hashFile, JSON.stringify(files));
+
+    const res = await this.uploadFiles(__dirname, [ hashFile ], sdfOptions);
+    console.log(`Updated hashFile ${ res[0] }`);
+    rimraf.sync(dir);
+    return files;
+  }
+
+  /**
+   * Get the hash files content
+   * @param {object} [sdfOptions=this.sdfOptions]
+   * @return {array<object>}
+   */
+  async getHash({ password, options } = this.sdfOptions) {
+    const p = 'compiled-restlet';
+    const paths = '/SuiteScripts/nscabinet/hashes.json';
+    try {
+      await sdf(cmd.importfiles, password, { ...options, paths, p });
+      const content = JSON.parse(fs.readFileSync('compiled-restlet/FileCabinet/SuiteScripts/nscabinet/hashes.json').toString());
+      return content;
+    } catch (error) {
+      console.log(error.message);
+      return [];
     }
-  );
+  }
+
+  /**
+   * Delete files from the FileCabinet
+   * @param {array<string>} files paths to the files have to be absolute
+   * @param {object} [restletOptions=this.restletOptions]
+   * @return {promise}
+   */
+  async deleteFiles(files = required('files'), restletOptions = this.restletOptions) {
+    const action = 'deleteFiles';
+    const json = {
+      action,
+      files
+    };
+    return { action, files: files.map(file => checkPath(file, suiteScriptsRoot)), ...(await rp({ ...restletOptions, json })) };
+  }
+
+  /**
+   * Get the options used for the restlet
+   */
+  get restletOptions() {
+    return this._restletOptions;
+  }
+
+  /**
+   * Get the options used for the sdf cli
+   */
+  get sdfOptions() {
+    return this._sdfOptions;
+  }
 }
+
+module.exports = NsCabinet;
