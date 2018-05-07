@@ -30,23 +30,24 @@ const post = ({ action, ...data }) => {
 /**
  * Find the id of an file by path
  * @param {string} path
+ * @throws {error} Path "path" is not a file
  * @return {object}
  */
 const findIdByName = function (path) {
   const filename = path.replace(/^.*[\\\/]/, '');
   const folder = path.replace(filename, '');
+  if (!filename.includes('.')) throw new Error(`Path "${ path }" is not a file`);
 
   const filter = [ [ 'folder', 'anyof', [ folder ] ], 'and', [ 'name', 'is', filename ] ];
 
-  const columns = [ 'name', 'filetype', 'folder' ].map(i => {
-    return new nlobjSearchColumn(i);
+  const columns = [ 'name', 'filetype', 'folder' ].map(column => {
+    return new nlobjSearchColumn(column);
   });
 
   const foundFiles = nlapiSearchRecord('file', null, filter, columns) || [];
 
   // double check
   const foundItem = foundFiles.filter(resFile => resFile.getValue('name') === filename)[0] || {};
-
   return { id: foundItem.id, filename, folder };
 };
 
@@ -86,3 +87,11 @@ const deleteFiles = function (files) {
   nlapiLogExecution('DEBUG', '"deleteFiles" result', JSON.stringify(res));
   return res;
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    post,
+    findIdByName,
+    deleteFiles
+  };
+}

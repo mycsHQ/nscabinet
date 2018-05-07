@@ -3,29 +3,29 @@
   "version": "0.5.2",
   "description": "Upload and download files from netsuite.",
   "engines": {
-    "node": ">=4.x",
-    "npm": ">=2.x.x"
+    "node": ">=8.x",
+    "npm": ">=5.x.x"
   },
   "main": "src/nscabinet.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/suiteplus/nscabinet.git"
   },
-  "keywords": [
-    "netsuite",
-    "suitescript",
-    "cabinet"
-  ],
-  "author": "Suiteplus",
+  "keywords": ["netsuite", "suitescript", "cabinet", "sdf"],
+  "author": "jroehl",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/suiteplus/nscabinet/issues"
   },
   "scripts": {
-    "compile": "rimraf compiled-restlet && cp -r nscabinet compiled-restlet && babel nscabinet -x .js --out-dir compiled-restlet"
+    "compile": "rimraf compiled-restlet && cp -r nscabinet compiled-restlet && babel nscabinet -x .js --out-dir compiled-restlet",
+    "test": "yarn lint && yarn jest",
+    "lint": "eslint **/*.js",
+    "lint:fix": "eslint **/*.js --fix",
+    "jest": "jest --coverage"
   },
-  "homepage": "https://github.com/suiteplus/nscabinet#readme",
   "dependencies": {
+    "dotenv": "^5.0.1",
     "node-sdf": "mycshq/node-sdf#upgrade-version",
     "request": "^2.85.0",
     "request-promise-native": "^1.0.5",
@@ -41,6 +41,11 @@
     "eslint": "^4.19.1",
     "eslint-config-airbnb-base": "^11.3.2",
     "eslint-config-mycs": "^2.0.0",
-    "eslint-plugin-import": "^2.11.0"
+    "eslint-plugin-import": "^2.11.0",
+    "jest": "^22.4.3",
+    "jest-cli": "^22.4.3"
+  },
+  "jest": {
+    "verbose": true
   }
 }

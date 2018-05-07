@@ -23,7 +23,11 @@ const getHash = (str, algorithm = 'md5', encoding = 'hex') =>
  * @param {Array} hashFiles
  * @return {string} hash of file or null if not found
  */
-const getStoredHash = (filePathCheck, hashFiles) => hashFiles.filter(({ filePath }) => filePath === filePathCheck).map(({ fileHash }) => fileHash)[0] || null;
+const getStoredHash = (filePathCheck, hashFiles) => {
+  const file = hashFiles.find(({ filePath }) => filePath === filePathCheck);
+  if (file) return file.fileHash;
+  return null;
+};
 
 /**
  * check if the filehash and the stored hash is equal
@@ -38,9 +42,10 @@ const isFileModified = (filePath, hashFiles) => getHash(fs.readFileSync(filePath
  * get all files from directory in sync call
  *
  * @param {string} dir directory path
- * @param {boolean} getChecksum
- * @param {boolean} excludeDotFiles
- * @param {array<object>} [fileList=[]] Array with filelist
+ * @param {boolean} getChecksum if a hash should be created
+ * @param {boolean} [excludeDotFiles=true]
+ * @param {array<object>} [fileList=[]] Array with filelist (Used for recursion)
+ * @param {string} [rootDir=null] The rootDir of the method call (Used for recursion)
  * @return {array<object>} Array of Objects with file & filepath
  */
 const getAllFilesSync = (dir, getChecksum, prefix = '/SuiteScripts', excludeDotFiles = true, fileList = [], rootDir = null) => {
@@ -64,6 +69,7 @@ const getAllFilesSync = (dir, getChecksum, prefix = '/SuiteScripts', excludeDotF
 
 module.exports = {
   getHash,
+  getStoredHash,
   isFileModified,
   getAllFilesSync
 };
