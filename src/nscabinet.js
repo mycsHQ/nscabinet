@@ -61,7 +61,7 @@ class NsCabinet {
         ...normalizedFilePath
           .join(path.sep)
           .replace(normalizedFileBasePath.join(path.sep), '')
-          .split(path.sep)
+          .split(path.sep),
       ];
 
       const sourceFile = path.resolve(path.sep, ...normalizedRootpath, ...normalizedFilePath, fileName);
@@ -71,7 +71,7 @@ class NsCabinet {
     });
     await this.deployProject(newProjectPath, sdfOptions);
     rimraf.sync(newProjectPath);
-    console.log(`Uploaded ${ files.length } files`);
+    console.log(`Uploaded ${files.length} files`);
     return copiedFiles.map(file => file.replace(fileBasePath, suiteScriptsRoot));
   }
 
@@ -83,42 +83,39 @@ class NsCabinet {
    */
   async listFiles(folder = required('folder'), { password, options } = this.sdfOptions) {
     const fileList = await sdf(cmd.listfiles, password, { ...options, folder: checkPath(folder, suiteScriptsRoot) });
-    const files = fileList.match(new RegExp(`${ folder }\/.*`, 'g'));
+    const files = fileList.match(new RegExp(`${folder}\/.*`, 'g'));
     return files;
   }
 
-  async syncFolders(
-    sourceFolder = required('sourceFolder'),
-    destinationFolder = required('destinationFolder'),
-    withHash = required('withHash'),
-    sdfOptions = this.sdfOptions
-  ) {
+  async updateFileCabinet(sourceFolder = required('sourceFolder'), withHash = true, sdfOptions = this.sdfOptions) {
     const filesInDir = getAllFilesSync(sourceFolder, true);
     const hashes = await this.getHash(sdfOptions);
 
+    // check for modified files (by file hash)
     const filesToUpload = filesInDir.filter(({ filePath }) => filePath && isFileModified(filePath, hashes));
 
-    if (filesToUpload.length <= 0) {
-      console.log('>>>>>>> Nothing to upload');
-      return;
-    }
-
-    await this.uploadFiles(sourceFolder, filesToUpload, sdfOptions);
-
+    let excludeFromHash = [];
     // check if there are less files in repo than before
     if (withHash && hashes.length > filesInDir.length) {
       const files = filesInDir.map(({ filePath }) => filePath);
       const inters = hashes.filter(({ filePath }) => !files.includes(filePath));
-      console.log(`>>>>>>> ${ inters.length } file${ inters.length > 1 ? 's' : '' } marked for removal`);
+      console.log(`>>>>>>> ${inters.length} file${inters.length > 1 ? 's' : ''} marked for removal`);
       const { gotDeleted, withError } = await this.deleteFiles(inters.map(({ remoteFilePath }) => remoteFilePath));
       const successful = gotDeleted.length;
-      console.log(`>>>>>>> Successfully Deleted ${ successful } file${ successful > 1 ? 's' : '' }`);
+      console.log(`>>>>>>> Successfully Deleted ${successful} file${successful > 1 ? 's' : ''}`);
       const failed = withError.length;
-      console.log(`>>>>>>> Failed deleting ${ failed } file${ failed > 1 ? 's' : '' }`);
+      console.log(`>>>>>>> Failed deleting ${failed} file${failed > 1 ? 's' : ''}`);
 
-      const excludeFromHash = withError.map(({ remoteFilePath }) => remoteFilePath);
-      await this.updateHashFile(sourceFolder, true, excludeFromHash, sdfOptions);
+      excludeFromHash = withError.map(({ remoteFilePath }) => remoteFilePath);
     }
+
+    if (filesToUpload.length > 0) {
+      await this.uploadFiles(sourceFolder, filesToUpload, sdfOptions);
+      console.log('>>>>>>> Nothing to upload');
+      return;
+    }
+
+    await this.updateHashFile(sourceFolder, true, excludeFromHash, sdfOptions);
   }
 
   /**
@@ -129,7 +126,7 @@ class NsCabinet {
    * @return {promise}
    */
   async importFiles(paths = required('paths'), project = required('project'), { password, options } = this.sdfOptions) {
-    const pathString = `${ paths.reduce((red, path) => `${ red }\"${ checkPath(path) }\" `, '') }`;
+    const pathString = `${paths.reduce((red, path) => `${red}\"${checkPath(path)}\" `, '')}`;
     return sdf(cmd.importfiles, password, { ...options, paths: pathString, p: project });
   }
 
@@ -142,7 +139,7 @@ class NsCabinet {
    */
   async downloadFiles(paths = required('paths'), directory = required('directory'), { password, options } = this.sdfOptions) {
     const { newProjectPath, fileBasePath } = await sdfCreateAccountCustomisationProject('temp-upload', __dirname);
-    const pathString = `${ paths.reduce((red, path) => `${ red }\"${ checkPath(path) }\" `, '') }`;
+    const pathString = `${paths.reduce((red, path) => `${red}\"${checkPath(path)}\" `, '')}`;
     await sdf(cmd.importfiles, password, { ...options, paths: pathString, p: newProjectPath });
     const res = paths.map(p => {
       const relPath = p.replace(suiteScriptsRoot, '');
@@ -192,15 +189,15 @@ class NsCabinet {
     const files = getAllFilesSync(checkPath(sourceDir), true, suiteScriptsRoot, excludeDotFiles).filter(
       ({ remoteFilePath }) => !failedFiles.includes(remoteFilePath)
     );
-    const dir = `${ __dirname }/nscabinet`;
-    const hashFile = `${ dir }/hashes.json`;
+    const dir = `${__dirname}/nscabinet`;
+    const hashFile = `${dir}/hashes.json`;
 
     // create needed directory structure
     mkdirRecursive(dir);
     fs.writeFileSync(hashFile, JSON.stringify(files));
 
-    const res = await this.uploadFiles(__dirname, [ hashFile ], sdfOptions);
-    console.log(`Updated hashFile ${ res[0] }`);
+    const res = await this.uploadFiles(__dirname, [hashFile], sdfOptions);
+    console.log(`Updated hashFile ${res[0]}`);
     rimraf.sync(dir);
     return files;
   }
@@ -233,7 +230,7 @@ class NsCabinet {
     const action = 'deleteFiles';
     const json = {
       action,
-      files
+      files,
     };
     return { action, files: files.map(file => checkPath(file, suiteScriptsRoot)), ...(await rp({ ...restletOptions, json })) };
   }

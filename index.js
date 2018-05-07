@@ -15,7 +15,8 @@ const temp = async () => {
   // return nsCabinet.uploadRestlet();
   // return nsCabinet.uploadFiles('/Users/jroehl/dev/mycs', [ '/nscabinet/LICENSE' ]);
   // await nsCabinet.downloadAllFiles('/SuiteScripts', '/Users/jroehl/Dropbox/Desktop/foobar');
-  return nsCabinet.updateHashFile(`${ __dirname }/nscabinet`);
+  // return nsCabinet.updateHashFile(`${ __dirname }/nscabinet`);
+  return nsCabinet.updateFileCabinet(`${ __dirname }/nscabinet`);
   // return nsCabinet.getHash();
 };
 

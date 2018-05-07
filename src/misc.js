@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { neededParams } = require('../config');
+const dotEnv = require('dotenv');
 
 /**
  * Normalize (remove duplicate, leading and trailing separators from path and split into array
@@ -33,68 +34,29 @@ const mkdirRecursive = pathToCreate => {
  * @return {array}
  */
 const splitInChunks = (arr, chunkSize = 5) => {
-  const copiedArray = [ ...arr ];
+  const copiedArray = [...arr];
   return new Array(Math.ceil(copiedArray.length / chunkSize)).fill().map(() => copiedArray.splice(0, chunkSize));
 };
 
-/**
- * Get email and password params from environment variables
- * ugly workaround for passwords and emails with special characters not parsed correctly
- *
- * @param {string} [nsScriptsPath] path to upload directory
- * @return {object}
- */
-const getParams = nsScriptsPath => {
-  const rootPath = process.env.NSCONF_ROOTPATH ? `/SuiteScripts/${ process.env.NSCONF_ROOTPATH }` : '/SuiteScripts';
-  const trimPath = nsScriptsPath;
-  const password = process.env.NSCONF_PASSWORD;
-  const email = process.env.NSCONF_EMAIL;
-  const account = process.env.NSCONF_ACCOUNT;
-  const script = process.env.NSCONF_SCRIPT;
-
-  // variables have to be deleted due to "invalid character" errors
-  delete process.env.NSCONF_PASSWORD;
-  delete process.env.NSCONF_EMAIL;
-  delete process.env.NSCONF_ACCOUNT;
-  delete process.env.NSCONF_SCRIPTS;
-  const params = { rootPath };
-  if (password) {
-    params.password = password;
-  }
-  if (email) {
-    params.email = email;
-  }
-  if (trimPath) {
-    params.trimPath = trimPath;
-  }
-  if (account) {
-    params.account = account;
-  }
-  if (script) {
-    params.script = script;
-  }
-  return params;
-};
-
 const getSdfOptions = ({ role, realm, account, email, password }) => {
-  const options = { role, url: realm.startsWith('system.') ? realm : `system.${ realm }`, email, account };
+  const options = { role, url: realm.startsWith('system.') ? realm : `system.${realm}`, email, account };
   return { options, password };
 };
 
 const getRestletOptions = ({ role, realm, script, deployment, account, email, password }) => {
-  const nlauthRolePortion = role ? `,nlauth_role=${ role }` : '';
-  const url = `https://rest.${ realm.replace('system.', '') }/app/site/hosting/restlet.nl`;
+  const nlauthRolePortion = role ? `,nlauth_role=${role}` : '';
+  const url = `https://rest.${realm.replace('system.', '')}/app/site/hosting/restlet.nl`;
 
   return {
     url,
     qs: {
       script,
-      deploy: deployment
+      deploy: deployment,
     },
     method: 'POST',
     headers: {
-      authorization: `NLAuth nlauth_account=${ account },nlauth_email=${ email },nlauth_signature=${ password }${ nlauthRolePortion }`
-    }
+      authorization: `NLAuth nlauth_account=${account},nlauth_email=${email},nlauth_signature=${password}${nlauthRolePortion}`,
+    },
   };
 };
 
@@ -103,11 +65,36 @@ const getRestletOptions = ({ role, realm, script, deployment, account, email, pa
  * @param {object} params
  * @returns {object}
  */
-const checkParams = params => {
+const checkParams = (argParams = {}) => {
+  // get environment variables from .env file
+  dotEnv.config();
+
+  const {
+    NSCONF_ACCOUNT: account = argParams.account,
+    NSCONF_EMAIL: email = argParams.email,
+    NSCONF_PASSWORD: password = argParams.password,
+    NSCONF_ROOTPATH: rootPath = argParams.rootPath || '/SuiteScripts',
+    NSCONF_SCRIPT: script = argParams.script || 'customscript_nscabinet_restlet',
+    NSCONF_DEPLOYMENT: deployment = argParams.deployment || 1,
+    NSCONF_ROLE: role = argParams.role || 3,
+  } = process.env;
+
+  const params = {
+    account,
+    email,
+    password,
+    rootPath,
+    script,
+    deployment,
+    role,
+  };
+
   const neededSet = new Set(Object.values(neededParams));
-  const paramSet = new Set(Object.keys(params));
-  const difference = new Set([ ...neededSet ].filter(x => !paramSet.has(x)));
-  if (difference.length > 0) throw new Error(`Following params are missing: "${ difference }"`);
+  const paramSet = new Set(Object.entries(params).reduce((red, [key, value]) => (value ? [...red, value] : red), []));
+  const difference = new Set([...neededSet].filter(x => !paramSet.has(x)));
+  if (difference.length > 0) throw new Error(`Following params are missing: "${difference}"`);
+  console.log('Used params:');
+  console.dir(params, { depth: null, colors: true });
   return params;
 };
 
@@ -117,7 +104,7 @@ const checkParams = params => {
  * @throws {error} Parameter "*" is required!
  */
 const required = p => {
-  throw new Error(`Parameter "${ p }" is required!`);
+  throw new Error(`Parameter "${p}" is required!`);
 };
 
 /**
@@ -128,7 +115,7 @@ const required = p => {
  */
 const checkPath = (p, leadingString = '/') => {
   if (!p.startsWith(leadingString)) {
-    throw new Error(`Path has to start with "${ leadingString }" and is "${ p }"`);
+    throw new Error(`Path has to start with "${leadingString}" and is "${p}"`);
   }
   return p;
 };
@@ -156,5 +143,5 @@ module.exports = {
   mkdirRecursive,
   normalizePath,
   checkPath,
-  cp
+  cp,
 };
